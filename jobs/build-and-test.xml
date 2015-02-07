@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1.2">
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@1.2">
+    <script>steps.stage &apos;DEV&apos;
+node {
+  checkout changelog: true,
+      poll: true,
+      scm: [$class: &apos;GitSCM&apos;, branches: [[name: &apos;*/hybris5.2&apos;]],
+      doGenerateSubmoduleConfigurations: false,
+      extensions: [],
+      submoduleCfg: [],
+      userRemoteConfigs: [[url: &apos;git@github.com:arvatoSystemsNA/hybris-sample.git&apos;]]]
+
+      dir(&apos;config&apos;) { // switch to subdir
+        checkout changelog: true,
+            poll: true,
+            scm: [$class: &apos;GitSCM&apos;, branches: [[name: &apos;*/hybris5&apos;]],
+            doGenerateSubmoduleConfigurations: false,
+            extensions: [],
+            submoduleCfg: [],
+            userRemoteConfigs: [[url: &apos;git@github.com:arvatoSystemsNA/hybris-sample-config.git&apos;]]]
+      }
+
+     sh &apos;git submodule init&apos;
+     sh &apos;git submodule update&apos;
+
+      writeFile encoding: &apos;UTF-8&apos;, file: &apos;user-build.xml&apos;, text: &apos;&apos;&apos;&lt;?xml version=&quot;1.0&quot;?&gt;
+&lt;project name=&quot;user-build&quot;&gt;
+    &lt;property name=&quot;download_dir&quot; value=&quot;/Users/Shared/Jenkins/hybris-bin&quot; /&gt;
+    &lt;property name=&quot;config_dir&quot; value=&quot;config/config&quot; /&gt;
+&lt;/project&gt;&apos;&apos;&apos;
+
+      def antHome = tool &apos;ant&apos;
+      env.PATH = &quot;${antHome}/bin:${env.PATH}&quot;
+      env.ANT_OPTS=&quot;-Xms1G -Xmx3G -XX:MaxPermSize=512m&quot;
+      env.JAVA_HOME=&quot;/Library/Java/JavaVirtualMachines/jdk1.7.0_60.jdk/Contents/Home&quot;
+      //sh &apos;ant install&apos;
+      sh &apos;ant all&apos;
+      sh &apos;ant unittests&apos;
+
+      step([$class: &apos;JUnitResultArchiver&apos;, keepLongStdio: false, testDataPublishers: [], testResults: &apos;hybris/log/junit/TESTS*.xml&apos;])
+}
+steps.input(message: &quot;RUN NEXT STAGE?&quot;)
+
+parallel(staticAnalysis: {
+    node{
+      stage name: &quot;Static Analysis&quot;, concurency: 1
+      echo &apos;Running next Sonar&apos;
+    }
+  },performanceTesting: {
+    node{
+      stage name: &quot;Performance Testing&quot;, concurency: 1
+      echo &apos;Running performance tests&apos;
+    }
+  }
+)
+</script>
+    <sandbox>false</sandbox>
+  </definition>
+  <triggers/>
+</flow-definition>
